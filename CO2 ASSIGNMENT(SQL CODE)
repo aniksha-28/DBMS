@@ -1,0 +1,948 @@
+mysql> CREATE TABLE d3_sender_info (
+    ->     SenderID INT PRIMARY KEY,
+    ->     SenderName VARCHAR(60) NOT NULL,
+    ->     RouteGroup VARCHAR(10) NOT NULL
+    -> );
+ERROR 1046 (3D000): No database selected
+mysql> DROP DATABASE IF EXISTS swiftspan_co2;
+Query OK, 0 rows affected, 1 warning (0.05 sec)
+
+mysql>
+mysql> CREATE DATABASE swiftspan_co2;
+Query OK, 1 row affected (0.01 sec)
+
+mysql>
+mysql> USE swiftspan_co2;
+Database changed
+mysql> SHOW DATABASES;
++-------------------------+
+| Database                |
++-------------------------+
+| aad                     |
+| ad                      |
+| asd                     |
+| college                 |
+| collegedb               |
+| course                  |
+| csa05                   |
+| csa0512                 |
+| csa059                  |
+| csa0593                 |
+| csa09                   |
+| dbms                    |
+| emp                     |
+| employee                |
+| employees               |
+| hospitaldb              |
+| information_schema      |
+| librarydb               |
+| meridian_practice_extra |
+| museumdb                |
+| mysql                   |
+| performance_schema      |
+| schooldb                |
+| stud                    |
+| studentdb               |
+| swiftspan               |
+| swiftspan_co2           |
+| sys                     |
+| teacherdb               |
++-------------------------+
+29 rows in set (0.00 sec)
+
+mysql>
+mysql> USE swiftspan_co2;
+Database changed
+mysql> CREATE TEMPORARY TABLE digits (
+    ->     d INT PRIMARY KEY
+    -> );
+Query OK, 0 rows affected (0.05 sec)
+
+mysql>
+mysql> INSERT INTO digits VALUES
+    -> (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+Query OK, 10 rows affected (0.00 sec)
+Records: 10  Duplicates: 0  Warnings: 0
+
+mysql>
+mysql> CREATE TEMPORARY TABLE seq_num (
+    ->     n INT PRIMARY KEY
+    -> );
+Query OK, 0 rows affected (0.00 sec)
+
+mysql>
+mysql> INSERT INTO seq_num(n)
+    -> SELECT 1 + a.d + 10*b.d + 100*c.d
+    ->        + 1000*d.d + 10000*e.d + 100000*f.d
+    -> FROM digits a
+    -> CROSS JOIN digits b
+    -> CROSS JOIN digits c
+    -> CROSS JOIN digits d
+    -> CROSS JOIN digits e
+    -> CROSS JOIN digits f
+    -> WHERE
+    ->     (a.d + 10*b.d + 100*c.d
+    ->     + 1000*d.d + 10000*e.d + 100000*f.d) < 600000;
+ERROR 1137 (HY000): Can't reopen table: 'a'
+mysql>
+mysql> SET @N = 10000;
+Query OK, 0 rows affected (0.03 sec)
+
+mysql>
+mysql> SET @ACTORS = @N / 20;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql>
+mysql> SELECT @N AS Total_Observations,
+    ->        @ACTORS AS Total_Senders;
++--------------------+---------------+
+| Total_Observations | Total_Senders |
++--------------------+---------------+
+|              10000 | 500.000000000 |
++--------------------+---------------+
+1 row in set (0.00 sec)
+
+mysql> CREATE TABLE d1_flat_obs (
+    ->     SenderID INT NOT NULL,
+    ->     SenderName VARCHAR(60) NOT NULL,
+    ->     RouteGroup VARCHAR(5) NOT NULL,
+    ->     ServiceID INT NOT NULL,
+    ->     ServiceCode VARCHAR(10) NOT NULL,
+    ->     ServiceName VARCHAR(60) NOT NULL,
+    ->     VolumeWeight DECIMAL(4,2) NOT NULL,
+    ->     DispatchWave TINYINT NOT NULL,
+    ->     CoordinatorID INT NOT NULL,
+    ->     CoordinatorName VARCHAR(60) NOT NULL,
+    ->     Hub VARCHAR(5) NOT NULL,
+    ->     Completion TINYINT UNSIGNED NOT NULL,
+    ->     ServiceBand VARCHAR(12) NOT NULL,
+    ->     RouteFactor DECIMAL(3,2) NOT NULL,
+    ->
+    ->     PRIMARY KEY (SenderID, ServiceID, DispatchWave),
+    ->
+    ->     UNIQUE (SenderID, ServiceCode, DispatchWave),
+    ->
+    ->     CHECK (Completion BETWEEN 0 AND 100),
+    ->     CHECK (VolumeWeight > 0),
+    ->     CHECK (RouteFactor > 0)
+    -> );
+Query OK, 0 rows affected (0.15 sec)
+
+mysql> DESCRIBE d1_flat_obs;
++-----------------+------------------+------+-----+---------+-------+
+| Field           | Type             | Null | Key | Default | Extra |
++-----------------+------------------+------+-----+---------+-------+
+| SenderID        | int              | NO   | PRI | NULL    |       |
+| SenderName      | varchar(60)      | NO   |     | NULL    |       |
+| RouteGroup      | varchar(5)       | NO   |     | NULL    |       |
+| ServiceID       | int              | NO   | PRI | NULL    |       |
+| ServiceCode     | varchar(10)      | NO   |     | NULL    |       |
+| ServiceName     | varchar(60)      | NO   |     | NULL    |       |
+| VolumeWeight    | decimal(4,2)     | NO   |     | NULL    |       |
+| DispatchWave    | tinyint          | NO   | PRI | NULL    |       |
+| CoordinatorID   | int              | NO   |     | NULL    |       |
+| CoordinatorName | varchar(60)      | NO   |     | NULL    |       |
+| Hub             | varchar(5)       | NO   |     | NULL    |       |
+| Completion      | tinyint unsigned | NO   |     | NULL    |       |
+| ServiceBand     | varchar(12)      | NO   |     | NULL    |       |
+| RouteFactor     | decimal(3,2)     | NO   |     | NULL    |       |
++-----------------+------------------+------+-----+---------+-------+
+14 rows in set (0.01 sec)
+
+mysql> CREATE TABLE d2_sender (
+    ->     SenderID INT PRIMARY KEY,
+    ->     SenderName VARCHAR(60) NOT NULL,
+    ->     RouteGroup VARCHAR(5) NOT NULL
+    -> );
+Query OK, 0 rows affected (0.10 sec)
+
+mysql> CREATE TABLE d2_service (
+    ->     ServiceID INT PRIMARY KEY,
+    ->     ServiceCode VARCHAR(10) NOT NULL,
+    ->     ServiceName VARCHAR(60) NOT NULL,
+    ->     VolumeWeight DECIMAL(4,2) NOT NULL,
+    ->     UNIQUE (ServiceCode),
+    ->     CHECK (VolumeWeight > 0)
+    -> );
+Query OK, 0 rows affected (0.15 sec)
+
+mysql> CREATE TABLE d2_observation_partial (
+    ->     SenderID INT NOT NULL,
+    ->     ServiceID INT NOT NULL,
+    ->     DispatchWave TINYINT NOT NULL,
+    ->     CoordinatorID INT NOT NULL,
+    ->     CoordinatorName VARCHAR(60) NOT NULL,
+    ->     Hub VARCHAR(5) NOT NULL,
+    ->     Completion TINYINT UNSIGNED NOT NULL,
+    ->     ServiceBand VARCHAR(12) NOT NULL,
+    ->     RouteFactor DECIMAL(3,2) NOT NULL,
+    ->
+    ->     PRIMARY KEY (SenderID, ServiceID, DispatchWave),
+    ->
+    ->     FOREIGN KEY (SenderID)
+    ->         REFERENCES d2_sender(SenderID),
+    ->
+    ->     FOREIGN KEY (ServiceID)
+    ->         REFERENCES d2_service(ServiceID),
+    ->
+    ->     CHECK (Completion BETWEEN 0 AND 100),
+    ->     CHECK (RouteFactor > 0)
+    -> );
+Query OK, 0 rows affected (0.14 sec)
+
+mysql> SHOW TABLES;
++-------------------------+
+| Tables_in_swiftspan_co2 |
++-------------------------+
+| d1_flat_obs             |
+| d2_observation_partial  |
+| d2_sender               |
+| d2_service              |
++-------------------------+
+4 rows in set (0.00 sec)
+
+mysql>
+mysql> DESCRIBE d2_sender;
++------------+-------------+------+-----+---------+-------+
+| Field      | Type        | Null | Key | Default | Extra |
++------------+-------------+------+-----+---------+-------+
+| SenderID   | int         | NO   | PRI | NULL    |       |
+| SenderName | varchar(60) | NO   |     | NULL    |       |
+| RouteGroup | varchar(5)  | NO   |     | NULL    |       |
++------------+-------------+------+-----+---------+-------+
+3 rows in set (0.00 sec)
+
+mysql> DESCRIBE d2_service;
++--------------+--------------+------+-----+---------+-------+
+| Field        | Type         | Null | Key | Default | Extra |
++--------------+--------------+------+-----+---------+-------+
+| ServiceID    | int          | NO   | PRI | NULL    |       |
+| ServiceCode  | varchar(10)  | NO   | UNI | NULL    |       |
+| ServiceName  | varchar(60)  | NO   |     | NULL    |       |
+| VolumeWeight | decimal(4,2) | NO   |     | NULL    |       |
++--------------+--------------+------+-----+---------+-------+
+4 rows in set (0.00 sec)
+
+mysql> DESCRIBE d2_observation_partial;
++-----------------+------------------+------+-----+---------+-------+
+| Field           | Type             | Null | Key | Default | Extra |
++-----------------+------------------+------+-----+---------+-------+
+| SenderID        | int              | NO   | PRI | NULL    |       |
+| ServiceID       | int              | NO   | PRI | NULL    |       |
+| DispatchWave    | tinyint          | NO   | PRI | NULL    |       |
+| CoordinatorID   | int              | NO   |     | NULL    |       |
+| CoordinatorName | varchar(60)      | NO   |     | NULL    |       |
+| Hub             | varchar(5)       | NO   |     | NULL    |       |
+| Completion      | tinyint unsigned | NO   |     | NULL    |       |
+| ServiceBand     | varchar(12)      | NO   |     | NULL    |       |
+| RouteFactor     | decimal(3,2)     | NO   |     | NULL    |       |
++-----------------+------------------+------+-----+---------+-------+
+9 rows in set (0.00 sec)
+
+mysql> CREATE TABLE d3_sender (
+    ->     SenderID INT PRIMARY KEY,
+    ->     SenderName VARCHAR(60) NOT NULL,
+    ->     RouteGroup VARCHAR(5) NOT NULL
+    -> );
+Query OK, 0 rows affected (0.05 sec)
+
+mysql> CREATE TABLE d3_service (
+    ->     ServiceID INT PRIMARY KEY,
+    ->     ServiceCode VARCHAR(10) NOT NULL,
+    ->     ServiceName VARCHAR(60) NOT NULL,
+    ->     VolumeWeight DECIMAL(4,2) NOT NULL,
+    ->     UNIQUE (ServiceCode),
+    ->     CHECK (VolumeWeight > 0)
+    -> );
+Query OK, 0 rows affected (0.12 sec)
+
+mysql> CREATE TABLE d3_coordinator (
+    ->     CoordinatorID INT PRIMARY KEY,
+    ->     CoordinatorName VARCHAR(60) NOT NULL,
+    ->     Hub VARCHAR(5) NOT NULL
+    -> );
+Query OK, 0 rows affected (0.11 sec)
+
+mysql> CREATE TABLE d3_assignment (
+    ->     SenderID INT NOT NULL,
+    ->     ServiceID INT NOT NULL,
+    ->     CoordinatorID INT NOT NULL,
+    ->
+    ->     PRIMARY KEY (SenderID, ServiceID),
+    ->
+    ->     FOREIGN KEY (SenderID)
+    ->         REFERENCES d3_sender(SenderID),
+    ->
+    ->     FOREIGN KEY (ServiceID)
+    ->         REFERENCES d3_service(ServiceID),
+    ->
+    ->     FOREIGN KEY (CoordinatorID)
+    ->         REFERENCES d3_coordinator(CoordinatorID)
+    -> );
+Query OK, 0 rows affected (0.22 sec)
+
+mysql> CREATE TABLE d3_band_factor (
+    ->     ServiceBand VARCHAR(12) PRIMARY KEY,
+    ->     RouteFactor DECIMAL(3,2) NOT NULL,
+    ->     CHECK (RouteFactor > 0)
+    -> );
+Query OK, 0 rows affected (0.11 sec)
+
+mysql> CREATE TABLE d3_completion_band (
+    ->     Completion TINYINT UNSIGNED PRIMARY KEY,
+    ->     ServiceBand VARCHAR(12) NOT NULL,
+    ->
+    ->     CHECK (Completion BETWEEN 0 AND 100),
+    ->
+    ->     FOREIGN KEY (ServiceBand)
+    ->         REFERENCES d3_band_factor(ServiceBand)
+    -> );
+Query OK, 0 rows affected (0.11 sec)
+
+mysql> CREATE TABLE d3_observation (
+    ->     SenderID INT NOT NULL,
+    ->     ServiceID INT NOT NULL,
+    ->     DispatchWave TINYINT NOT NULL,
+    ->     Completion TINYINT UNSIGNED NOT NULL,
+    ->
+    ->     PRIMARY KEY (SenderID, ServiceID, DispatchWave),
+    ->
+    ->     FOREIGN KEY (SenderID, ServiceID)
+    ->         REFERENCES d3_assignment(SenderID, ServiceID),
+    ->
+    ->     FOREIGN KEY (Completion)
+    ->         REFERENCES d3_completion_band(Completion),
+    ->
+    ->     CHECK (DispatchWave > 0),
+    ->     CHECK (Completion BETWEEN 0 AND 100)
+    -> );
+Query OK, 0 rows affected (0.09 sec)
+
+mysql> CREATE TABLE d3_group_requirement (
+    ->     RouteGroup VARCHAR(5) NOT NULL,
+    ->     ServiceID INT NOT NULL,
+    ->
+    ->     PRIMARY KEY (RouteGroup, ServiceID),
+    ->
+    ->     FOREIGN KEY (ServiceID)
+    ->         REFERENCES d3_service(ServiceID)
+    -> );
+Query OK, 0 rows affected (0.14 sec)
+
+mysql> SHOW TABLES;
++-------------------------+
+| Tables_in_swiftspan_co2 |
++-------------------------+
+| d1_flat_obs             |
+| d2_observation_partial  |
+| d2_sender               |
+| d2_service              |
+| d3_assignment           |
+| d3_band_factor          |
+| d3_completion_band      |
+| d3_coordinator          |
+| d3_group_requirement    |
+| d3_observation          |
+| d3_sender               |
+| d3_service              |
++-------------------------+
+12 rows in set (0.00 sec)
+
+mysql> INSERT INTO d3_band_factor VALUES
+    -> ('DELAYED',1.25),
+    -> ('AT_RISK',1.10),
+    -> ('ON_TRACK',1.00),
+    -> ('EXCELLENT',0.90);
+Query OK, 4 rows affected (0.08 sec)
+Records: 4  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d3_completion_band (Completion, ServiceBand)
+    -> SELECT n,
+    ->     CASE
+    ->         WHEN n < 30 THEN 'DELAYED'
+    ->         WHEN n < 60 THEN 'AT_RISK'
+    ->         WHEN n < 80 THEN 'ON_TRACK'
+    ->         ELSE 'EXCELLENT'
+    ->     END
+    -> FROM seq_num
+    -> WHERE n BETWEEN 1 AND 100;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql>
+mysql> INSERT INTO d3_completion_band
+    -> VALUES (0,'DELAYED');
+Query OK, 1 row affected (0.05 sec)
+
+mysql> INSERT INTO d3_service
+    ->     (ServiceID, ServiceCode, ServiceName, VolumeWeight)
+    -> SELECT
+    ->     n,
+    ->     CONCAT('SV',LPAD(n,3,'0')),
+    ->     CONCAT('Service Name ',n),
+    ->     CAST(0.50 + MOD(n,6)*0.05 AS DECIMAL(4,2))
+    -> FROM seq_num
+    -> WHERE n BETWEEN 1 AND 20;
+Query OK, 0 rows affected (0.05 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d3_coordinator
+    ->     (CoordinatorID, CoordinatorName, Hub)
+    -> SELECT
+    ->     n,
+    ->     CONCAT('Coordinator ',n),
+    ->     CONCAT('H',LPAD(MOD(n-1,5)+1,2,'0'))
+    -> FROM seq_num
+    -> WHERE n BETWEEN 1 AND 100;
+Query OK, 0 rows affected (0.05 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d3_sender
+    ->     (SenderID, SenderName, RouteGroup)
+    -> SELECT
+    ->     n,
+    ->     CONCAT('Sender ',n),
+    ->     CONCAT('G',MOD(n-1,4)+1)
+    -> FROM seq_num
+    -> WHERE n BETWEEN 1 AND @ACTORS;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d3_group_requirement (RouteGroup, ServiceID)
+    -> SELECT
+    ->     CONCAT('G',g.n),
+    ->     s.n
+    -> FROM seq_num g
+    -> JOIN seq_num s
+    ->     ON s.n BETWEEN (g.n-1)*5+1 AND g.n*5
+    -> WHERE g.n BETWEEN 1 AND 4;
+ERROR 1137 (HY000): Can't reopen table: 'g'
+mysql> INSERT INTO d3_group_requirement (RouteGroup, ServiceID)
+    -> SELECT
+    ->     CONCAT('G',g.n),
+    ->     s.n
+    -> FROM seq_num g
+    -> JOIN seq_num s
+    ->     ON s.n BETWEEN (g.n-1)*5+1 AND g.n*5
+    -> WHERE g.n BETWEEN 1 AND 4;
+ERROR 1137 (HY000): Can't reopen table: 'g'
+mysql> INSERT INTO d3_group_requirement (RouteGroup, ServiceID)
+    -> SELECT
+    ->     CONCAT('G',g.n),
+    ->     s.n
+    -> FROM seq_num g
+    -> JOIN seq_num s
+    ->     ON s.n BETWEEN (g.n-1)*5+1 AND g.n*5
+    -> WHERE g.n BETWEEN 1 AND 4;
+ERROR 1137 (HY000): Can't reopen table: 'g'
+mysql> INSERT INTO d3_assignment
+    ->     (SenderID, ServiceID, CoordinatorID)
+    -> SELECT
+    ->     s.SenderID,
+    ->     g.ServiceID,
+    ->     MOD(s.SenderID + g.ServiceID*7 - 1,100)+1
+    -> FROM d3_sender s
+    -> JOIN d3_group_requirement g
+    ->     ON g.RouteGroup=s.RouteGroup;
+Query OK, 0 rows affected (0.01 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d3_observation
+    ->     (SenderID, ServiceID, DispatchWave, Completion)
+    -> SELECT
+    ->     a.SenderID,
+    ->     a.ServiceID,
+    ->     w.n,
+    ->     MOD(a.SenderID*13 + a.ServiceID*17 + w.n*23,101)
+    -> FROM d3_assignment a
+    -> JOIN seq_num w
+    ->     ON w.n BETWEEN 1 AND 4;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d2_sender
+    -> SELECT * FROM d3_sender;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql>
+mysql> INSERT INTO d2_service
+    -> SELECT * FROM d3_service;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d2_observation_partial
+    -> (
+    ->     SenderID, ServiceID, DispatchWave,
+    ->     CoordinatorID, CoordinatorName, Hub,
+    ->     Completion, ServiceBand, RouteFactor
+    -> )
+    -> SELECT
+    ->     o.SenderID, o.ServiceID, o.DispatchWave,
+    ->     k.CoordinatorID, k.CoordinatorName, k.Hub,
+    ->     o.Completion, cb.ServiceBand, bf.RouteFactor
+    -> FROM d3_observation o
+    -> JOIN d3_assignment a
+    ->     ON a.SenderID=o.SenderID
+    ->    AND a.ServiceID=o.ServiceID
+    -> JOIN d3_coordinator k
+    ->     ON k.CoordinatorID=a.CoordinatorID
+    -> JOIN d3_completion_band cb
+    ->     ON cb.Completion=o.Completion
+    -> JOIN d3_band_factor bf
+    ->     ON bf.ServiceBand=cb.ServiceBand;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> INSERT INTO d1_flat_obs
+    -> (
+    ->     SenderID, SenderName, RouteGroup,
+    ->     ServiceID, ServiceCode, ServiceName, VolumeWeight,
+    ->     DispatchWave, CoordinatorID, CoordinatorName, Hub,
+    ->     Completion, ServiceBand, RouteFactor
+    -> )
+    -> SELECT
+    ->     s.SenderID, s.SenderName, s.RouteGroup,
+    ->     v.ServiceID, v.ServiceCode, v.ServiceName, v.VolumeWeight,
+    ->     o.DispatchWave, k.CoordinatorID, k.CoordinatorName, k.Hub,
+    ->     o.Completion, cb.ServiceBand, bf.RouteFactor
+    -> FROM d3_observation o
+    -> JOIN d3_sender s
+    ->     ON s.SenderID=o.SenderID
+    -> JOIN d3_service v
+    ->     ON v.ServiceID=o.ServiceID
+    -> JOIN d3_assignment a
+    ->     ON a.SenderID=o.SenderID
+    ->    AND a.ServiceID=o.ServiceID
+    -> JOIN d3_coordinator k
+    ->     ON k.CoordinatorID=a.CoordinatorID
+    -> JOIN d3_completion_band cb
+    ->     ON cb.Completion=o.Completion
+    -> JOIN d3_band_factor bf
+    ->     ON bf.ServiceBand=cb.ServiceBand;
+Query OK, 0 rows affected (0.00 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> SELECT 'D1' AS Design, COUNT(*) AS Total_Rows
+    -> FROM d1_flat_obs
+    ->
+    -> UNION ALL
+    ->
+    -> SELECT 'D2', COUNT(*)
+    -> FROM d2_observation_partial
+    ->
+    -> UNION ALL
+    ->
+    -> SELECT 'D3', COUNT(*)
+    -> FROM d3_observation;
++--------+------------+
+| Design | Total_Rows |
++--------+------------+
+| D1     |          0 |
+| D2     |          0 |
+| D3     |          0 |
++--------+------------+
+3 rows in set (0.00 sec)
+
+mysql> SELECT * FROM d3_sender LIMIT 10;
+Empty set (0.00 sec)
+
+mysql>
+mysql> SELECT * FROM d3_service;
+Empty set (0.00 sec)
+
+mysql>
+mysql> SELECT * FROM d3_coordinator LIMIT 10;
+Empty set (0.00 sec)
+
+mysql>
+mysql> SELECT * FROM d3_assignment LIMIT 10;
+Empty set (0.00 sec)
+
+mysql>
+mysql> SELECT * FROM d3_observation
+    -> WHERE SenderID=1
+    -> ORDER BY ServiceID, DispatchWave;
+Empty set (0.00 sec)
+
+mysql> SELECT
+    ->     o.SenderID,
+    ->     o.ServiceID,
+    ->     o.DispatchWave,
+    ->     o.Completion,
+    ->     ROUND(
+    ->         o.Completion * v.VolumeWeight * bf.RouteFactor,
+    ->         2
+    ->     ) AS AdjIndex
+    -> FROM d3_observation o
+    -> JOIN d3_service v
+    ->     ON v.ServiceID=o.ServiceID
+    -> JOIN d3_completion_band cb
+    ->     ON cb.Completion=o.Completion
+    -> JOIN d3_band_factor bf
+    ->     ON bf.ServiceBand=cb.ServiceBand
+    -> WHERE o.SenderID=1
+    ->   AND o.DispatchWave=4
+    -> ORDER BY o.ServiceID;
+Empty set (0.05 sec)
+
+mysql> SELECT s.SenderID
+    -> FROM d3_sender s
+    -> WHERE NOT EXISTS (
+    ->     SELECT 1
+    ->     FROM d3_group_requirement g
+    ->     WHERE g.RouteGroup=s.RouteGroup
+    ->       AND (
+    ->         NOT EXISTS (
+    ->             SELECT 1
+    ->             FROM d3_observation o
+    ->             WHERE o.SenderID=s.SenderID
+    ->               AND o.ServiceID=g.ServiceID
+    ->         )
+    ->         OR EXISTS (
+    ->             SELECT 1
+    ->             FROM d3_observation b
+    ->             WHERE b.SenderID=s.SenderID
+    ->               AND b.ServiceID=g.ServiceID
+    ->               AND b.Completion < 39
+    ->         )
+    ->       )
+    -> )
+    -> ORDER BY s.SenderID;
+Empty set (0.05 sec)
+
+mysql> SELECT DISTINCT
+    ->     v.ServiceID,
+    ->     v.ServiceCode
+    -> FROM d3_observation o
+    -> JOIN d3_service v
+    ->     ON v.ServiceID=o.ServiceID
+    -> WHERE o.DispatchWave=4
+    -> AND o.ServiceID NOT IN (
+    ->     SELECT ServiceID
+    ->     FROM d3_observation
+    ->     WHERE DispatchWave=4
+    ->       AND Completion < 39
+    -> )
+    -> ORDER BY v.ServiceID;
+Empty set (0.00 sec)
+
+mysql> WITH base AS (
+    ->     SELECT
+    ->         k.CoordinatorID,
+    ->         k.Hub,
+    ->         o.Completion
+    ->     FROM d3_observation o
+    ->     JOIN d3_assignment a
+    ->         ON a.SenderID=o.SenderID
+    ->        AND a.ServiceID=o.ServiceID
+    ->     JOIN d3_coordinator k
+    ->         ON k.CoordinatorID=a.CoordinatorID
+    -> ),
+    -> c AS (
+    ->     SELECT
+    ->         CoordinatorID,
+    ->         Hub,
+    ->         AVG(Completion) AS m
+    ->     FROM base
+    ->     GROUP BY CoordinatorID, Hub
+    -> ),
+    -> h AS (
+    ->     SELECT
+    ->         Hub,
+    ->         AVG(Completion) AS hm
+    ->     FROM base
+    ->     GROUP BY Hub
+    -> )
+    -> SELECT
+    ->     c.CoordinatorID,
+    ->     c.Hub,
+    ->     ROUND(c.m,4) AS CoordinatorMean,
+    ->     ROUND(h.hm,4) AS HubObservationMean
+    -> FROM c
+    -> JOIN h ON h.Hub=c.Hub
+    -> WHERE c.m < h.hm
+    -> ORDER BY c.CoordinatorID;
+Empty set (0.05 sec)
+
+mysql> SELECT
+    ->     s.SenderID,
+    ->     s.SenderName
+    -> FROM d3_sender s
+    -> JOIN (
+    ->     SELECT SenderID
+    ->     FROM d3_observation
+    ->     WHERE Completion < 39
+    ->     GROUP BY SenderID
+    ->     HAVING COUNT(DISTINCT DispatchWave) >= 3
+    -> ) x ON x.SenderID=s.SenderID
+    -> ORDER BY s.SenderID;
+Empty set (0.00 sec)
+
+mysql> CREATE OR REPLACE VIEW v3_actor_wave AS
+    -> SELECT
+    ->     o.SenderID,
+    ->     o.ServiceID,
+    ->     v.ServiceCode,
+    ->     o.DispatchWave,
+    ->     o.Completion,
+    ->     cb.ServiceBand
+    -> FROM d3_observation o
+    -> JOIN d3_service v
+    ->     ON v.ServiceID=o.ServiceID
+    -> JOIN d3_completion_band cb
+    ->     ON cb.Completion=o.Completion;
+Query OK, 0 rows affected (0.06 sec)
+
+mysql> CREATE OR REPLACE VIEW v3_operational_hub AS
+    -> SELECT
+    ->     k.Hub,
+    ->     k.CoordinatorID,
+    ->     k.CoordinatorName,
+    ->     COUNT(*) AS Observations,
+    ->     ROUND(AVG(o.Completion),2) AS MeanCompletion
+    -> FROM d3_observation o
+    -> JOIN d3_assignment a
+    ->     ON a.SenderID=o.SenderID
+    ->    AND a.ServiceID=o.ServiceID
+    -> JOIN d3_coordinator k
+    ->     ON k.CoordinatorID=a.CoordinatorID
+    -> GROUP BY
+    ->     k.Hub,
+    ->     k.CoordinatorID,
+    ->     k.CoordinatorName;
+Query OK, 0 rows affected (0.05 sec)
+
+mysql> ^C
+mysql> SELECT *
+    -> FROM v3_actor_wave
+    -> WHERE SenderID=1;
+Empty set (0.00 sec)
+
+mysql>
+mysql> SELECT *
+    -> FROM v3_operational_hub;
+Empty set (0.00 sec)
+
+mysql> START TRANSACTION;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql>
+mysql> UPDATE d1_flat_obs
+    -> SET ServiceName='Divergent Name'
+    -> WHERE SenderID=1
+    ->   AND ServiceID=1
+    ->   AND DispatchWave=1;
+Query OK, 0 rows affected (0.00 sec)
+Rows matched: 0  Changed: 0  Warnings: 0
+
+mysql>
+mysql> SELECT
+    ->     ServiceID,
+    ->     ServiceName,
+    ->     COUNT(*) AS Copies
+    -> FROM d1_flat_obs
+    -> WHERE ServiceID=1
+    -> GROUP BY ServiceID, ServiceName;
+Empty set (0.00 sec)
+
+mysql>
+mysql> ROLLBACK;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> CREATE TABLE read_card (
+    ->     SenderID INT NOT NULL,
+    ->     ServiceID INT NOT NULL,
+    ->     SenderName VARCHAR(60) NOT NULL,
+    ->     RouteGroup VARCHAR(5) NOT NULL,
+    ->     ServiceCode VARCHAR(10) NOT NULL,
+    ->     ServiceName VARCHAR(60) NOT NULL,
+    ->     CoordinatorName VARCHAR(60) NOT NULL,
+    ->     Hub VARCHAR(5) NOT NULL,
+    ->     DispatchWave TINYINT NOT NULL,
+    ->     Completion TINYINT UNSIGNED NOT NULL,
+    ->     ServiceBand VARCHAR(12) NOT NULL,
+    ->     RouteFactor DECIMAL(3,2) NOT NULL,
+    ->     SnapshotID BIGINT NOT NULL,
+    ->
+    ->     PRIMARY KEY (SenderID, ServiceID)
+    -> );
+Query OK, 0 rows affected (0.08 sec)
+
+mysql> INSERT INTO read_card
+    -> (
+    ->     SenderID, ServiceID, SenderName, RouteGroup,
+    ->     ServiceCode, ServiceName, CoordinatorName, Hub,
+    ->     DispatchWave, Completion, ServiceBand, RouteFactor,
+    ->     SnapshotID
+    -> )
+    -> SELECT
+    ->     s.SenderID,
+    ->     v.ServiceID,
+    ->     s.SenderName,
+    ->     s.RouteGroup,
+    ->     v.ServiceCode,
+    ->     v.ServiceName,
+    ->     k.CoordinatorName,
+    ->     k.Hub,
+    ->     o.DispatchWave,
+    ->     o.Completion,
+    ->     cb.ServiceBand,
+    ->     bf.RouteFactor,
+    ->     1
+    -> FROM d3_observation o
+    -> JOIN d3_sender s
+    ->     ON s.SenderID=o.SenderID
+    -> JOIN d3_service v
+    ->     ON v.ServiceID=o.ServiceID
+    -> JOIN d3_assignment a
+    ->     ON a.SenderID=o.SenderID
+    ->    AND a.ServiceID=o.ServiceID
+    -> JOIN d3_coordinator k
+    ->     ON k.CoordinatorID=a.CoordinatorID
+    -> JOIN d3_completion_band cb
+    ->     ON cb.Completion=o.Completion
+    -> JOIN d3_band_factor bf
+    ->     ON bf.ServiceBand=cb.ServiceBand
+    -> WHERE o.DispatchWave=4;
+Query OK, 0 rows affected (0.01 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> SELECT *
+    -> FROM read_card
+    -> WHERE SenderID=1
+    -> ORDER BY ServiceID;
+Empty set (0.00 sec)
+
+mysql> SELECT COUNT(*) AS Read_Card_Rows
+    -> FROM read_card;
++----------------+
+| Read_Card_Rows |
++----------------+
+|              0 |
++----------------+
+1 row in set (0.00 sec)
+
+mysql> ANALYZE TABLE
+    -> d1_flat_obs,
+    -> d2_sender,
+    -> d2_service,
+    -> d2_observation_partial,
+    -> d3_sender,
+    -> d3_service,
+    -> d3_coordinator,
+    -> d3_assignment,
+    -> d3_observation,
+    -> d3_completion_band,
+    -> d3_band_factor,
+    -> d3_group_requirement,
+    -> read_card;
++--------------------------------------+---------+----------+----------+
+| Table                                | Op      | Msg_type | Msg_text |
++--------------------------------------+---------+----------+----------+
+| swiftspan_co2.d1_flat_obs            | analyze | status   | OK       |
+| swiftspan_co2.d2_sender              | analyze | status   | OK       |
+| swiftspan_co2.d2_service             | analyze | status   | OK       |
+| swiftspan_co2.d2_observation_partial | analyze | status   | OK       |
+| swiftspan_co2.d3_sender              | analyze | status   | OK       |
+| swiftspan_co2.d3_service             | analyze | status   | OK       |
+| swiftspan_co2.d3_coordinator         | analyze | status   | OK       |
+| swiftspan_co2.d3_assignment          | analyze | status   | OK       |
+| swiftspan_co2.d3_observation         | analyze | status   | OK       |
+| swiftspan_co2.d3_completion_band     | analyze | status   | OK       |
+| swiftspan_co2.d3_band_factor         | analyze | status   | OK       |
+| swiftspan_co2.d3_group_requirement   | analyze | status   | OK       |
+| swiftspan_co2.read_card              | analyze | status   | OK       |
++--------------------------------------+---------+----------+----------+
+13 rows in set (0.14 sec)
+
+mysql> SELECT
+    ->     TABLE_NAME,
+    ->     TABLE_ROWS,
+    ->     DATA_LENGTH,
+    ->     INDEX_LENGTH,
+    ->     DATA_LENGTH + INDEX_LENGTH AS ALLOCATED_BYTES
+    -> FROM information_schema.TABLES
+    -> WHERE TABLE_SCHEMA='swiftspan_co2'
+    -> ORDER BY TABLE_NAME;
++------------------------+------------+-------------+--------------+-----------------+
+| TABLE_NAME             | TABLE_ROWS | DATA_LENGTH | INDEX_LENGTH | ALLOCATED_BYTES |
++------------------------+------------+-------------+--------------+-----------------+
+| d1_flat_obs            |          0 |       16384 |        16384 |           32768 |
+| d2_observation_partial |          0 |       16384 |        16384 |           32768 |
+| d2_sender              |          0 |       16384 |            0 |           16384 |
+| d2_service             |          0 |       16384 |        16384 |           32768 |
+| d3_assignment          |          0 |       16384 |        32768 |           49152 |
+| d3_band_factor         |          4 |       16384 |            0 |           16384 |
+| d3_completion_band     |          1 |       16384 |        16384 |           32768 |
+| d3_coordinator         |          0 |       16384 |            0 |           16384 |
+| d3_group_requirement   |          0 |       16384 |        16384 |           32768 |
+| d3_observation         |          0 |       16384 |        16384 |           32768 |
+| d3_sender              |          0 |       16384 |            0 |           16384 |
+| d3_service             |          0 |       16384 |        16384 |           32768 |
+| read_card              |          0 |       16384 |            0 |           16384 |
+| v3_actor_wave          |       NULL |        NULL |         NULL |            NULL |
+| v3_operational_hub     |       NULL |        NULL |         NULL |            NULL |
++------------------------+------------+-------------+--------------+-----------------+
+15 rows in set (0.00 sec)
+
+mysql> SHOW TABLES;
++-------------------------+
+| Tables_in_swiftspan_co2 |
++-------------------------+
+| d1_flat_obs             |
+| d2_observation_partial  |
+| d2_sender               |
+| d2_service              |
+| d3_assignment           |
+| d3_band_factor          |
+| d3_completion_band      |
+| d3_coordinator          |
+| d3_group_requirement    |
+| d3_observation          |
+| d3_sender               |
+| d3_service              |
+| read_card               |
+| v3_actor_wave           |
+| v3_operational_hub      |
++-------------------------+
+15 rows in set (0.00 sec)
+
+mysql>
+mysql> SELECT COUNT(*) AS D1_Rows FROM d1_flat_obs;
++---------+
+| D1_Rows |
++---------+
+|       0 |
++---------+
+1 row in set (0.00 sec)
+
+mysql>
+mysql> SELECT COUNT(*) AS D2_Rows
+    -> FROM d2_observation_partial;
++---------+
+| D2_Rows |
++---------+
+|       0 |
++---------+
+1 row in set (0.00 sec)
+
+mysql>
+mysql> SELECT COUNT(*) AS D3_Rows
+    -> FROM d3_observation;
++---------+
+| D3_Rows |
++---------+
+|       0 |
++---------+
+1 row in set (0.00 sec)
+
+mysql>
+mysql> SELECT COUNT(*) AS Read_Card_Rows
+    -> FROM read_card;
++----------------+
+| Read_Card_Rows |
++----------------+
+|              0 |
++----------------+
+1 row in set (0.00 sec)
