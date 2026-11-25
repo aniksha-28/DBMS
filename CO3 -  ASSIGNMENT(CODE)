@@ -1,0 +1,645 @@
+
+-- =====================================================
+-- CSA05 DBMS ASSIGNMENT 3 (CO3)
+-- PROJECT: SHOPNEST DATABASE
+-- COMPLETE MYSQL IMPLEMENTATION
+-- =====================================================
+
+-- 1. CREATE DATABASE
+CREATE DATABASE IF NOT EXISTS ShopNestDB;
+USE ShopNestDB;
+
+
+-- =====================================================
+-- 2. UNNORMALISED TABLE
+-- =====================================================
+
+CREATE TABLE ORDER_LINE_FLAT (
+    OrderID VARCHAR(10),
+    OrderDate DATE,
+    CustomerID VARCHAR(10),
+    CustomerName VARCHAR(100),
+    CustomerEmail VARCHAR(100),
+    ShipStreet VARCHAR(100),
+    ShipCity VARCHAR(50),
+    ShipPIN VARCHAR(10),
+    ShipState VARCHAR(50),
+    ProductID VARCHAR(10),
+    ProductName VARCHAR(100),
+    UnitPrice DECIMAL(10,2),
+    CategoryID VARCHAR(10),
+    CategoryName VARCHAR(50),
+    SupplierID VARCHAR(10),
+    SupplierName VARCHAR(100),
+    SupplierPhone VARCHAR(20),
+    Quantity INT,
+    WarehouseID VARCHAR(10),
+    WarehouseCity VARCHAR(50),
+    TagList VARCHAR(500),
+    ColourList VARCHAR(300)
+);
+
+-- INSERT FLAT TABLE DATA
+
+INSERT INTO ORDER_LINE_FLAT VALUES
+('O101','2026-11-01','C01','Arun Kumar',
+'arun@example.com','Anna Salai','Chennai','600001',
+'Tamil Nadu','P01','Wireless Mouse',500.00,
+'CAT01','Electronics','S01','Tech Suppliers',
+'9876543210',2,'W01','Chennai',
+'Wireless,Portable','Black,White'),
+
+('O101','2026-11-01','C01','Arun Kumar',
+'arun@example.com','Anna Salai','Chennai','600001',
+'Tamil Nadu','P02','Keyboard',900.00,
+'CAT02','Accessories','S02','Smart Traders',
+'9876501234',1,'W02','Bengaluru',
+'Office','Grey'),
+
+('O102','2026-11-02','C02','Priya Sharma',
+'priya@example.com','MG Road','Bengaluru','560001',
+'Karnataka','P01','Wireless Mouse',500.00,
+'CAT01','Electronics','S01','Tech Suppliers',
+'9876543210',1,'W01','Chennai',
+'Wireless,Portable','Black,White');
+
+
+-- =====================================================
+-- 3. NORMALISED TABLES (3NF / BCNF)
+-- =====================================================
+
+-- 3.1 CUSTOMER
+
+CREATE TABLE CUSTOMER (
+    CustomerID VARCHAR(10) PRIMARY KEY,
+    CustomerName VARCHAR(100) NOT NULL,
+    CustomerEmail VARCHAR(100) UNIQUE NOT NULL
+);
+
+-- 3.2 SUPPLIER
+
+CREATE TABLE SUPPLIER (
+    SupplierID VARCHAR(10) PRIMARY KEY,
+    SupplierName VARCHAR(100) NOT NULL,
+    SupplierPhone VARCHAR(20) UNIQUE
+);
+
+-- 3.3 CATEGORY
+
+CREATE TABLE CATEGORY (
+    CategoryID VARCHAR(10) PRIMARY KEY,
+    CategoryName VARCHAR(50) NOT NULL
+);
+
+-- 3.4 WAREHOUSE
+
+CREATE TABLE WAREHOUSE (
+    WarehouseID VARCHAR(10) PRIMARY KEY,
+    WarehouseCity VARCHAR(50) NOT NULL
+);
+
+-- 3.5 POSTAL
+
+CREATE TABLE POSTAL (
+    ShipPIN VARCHAR(10) PRIMARY KEY,
+    ShipCity VARCHAR(50) NOT NULL,
+    ShipState VARCHAR(50) NOT NULL
+);
+
+-- 3.6 PRODUCT
+
+CREATE TABLE PRODUCT (
+    ProductID VARCHAR(10) PRIMARY KEY,
+    ProductName VARCHAR(100) NOT NULL,
+    UnitPrice DECIMAL(10,2) NOT NULL
+        CHECK (UnitPrice >= 0),
+    CategoryID VARCHAR(10) NOT NULL,
+    SupplierID VARCHAR(10) NOT NULL,
+
+    FOREIGN KEY (CategoryID)
+        REFERENCES CATEGORY(CategoryID),
+
+    FOREIGN KEY (SupplierID)
+        REFERENCES SUPPLIER(SupplierID)
+);
+
+-- 3.7 ORDERS
+
+CREATE TABLE ORDERS (
+    OrderID VARCHAR(10) PRIMARY KEY,
+    OrderDate DATE NOT NULL,
+    CustomerID VARCHAR(10) NOT NULL,
+    ShipStreet VARCHAR(100) NOT NULL,
+    ShipPIN VARCHAR(10) NOT NULL,
+
+    FOREIGN KEY (CustomerID)
+        REFERENCES CUSTOMER(CustomerID),
+
+    FOREIGN KEY (ShipPIN)
+        REFERENCES POSTAL(ShipPIN)
+);
+
+-- 3.8 ORDER_ITEM
+
+CREATE TABLE ORDER_ITEM (
+    OrderID VARCHAR(10),
+    ProductID VARCHAR(10),
+    Quantity INT NOT NULL CHECK (Quantity > 0),
+    WarehouseID VARCHAR(10) NOT NULL,
+
+    PRIMARY KEY (OrderID, ProductID),
+
+    FOREIGN KEY (OrderID)
+        REFERENCES ORDERS(OrderID),
+
+    FOREIGN KEY (ProductID)
+        REFERENCES PRODUCT(ProductID),
+
+    FOREIGN KEY (WarehouseID)
+        REFERENCES WAREHOUSE(WarehouseID)
+);
+
+-- 3.9 STREET_POSTAL
+
+CREATE TABLE STREET_POSTAL (
+    ShipStreet VARCHAR(100),
+    ShipCity VARCHAR(50),
+    ShipPIN VARCHAR(10) NOT NULL,
+
+    PRIMARY KEY (ShipStreet, ShipCity),
+
+    FOREIGN KEY (ShipPIN)
+        REFERENCES POSTAL(ShipPIN)
+);
+
+
+-- =====================================================
+-- 4. FOURTH NORMAL FORM (4NF)
+-- =====================================================
+
+-- 4.1 PRODUCT_TAG
+
+CREATE TABLE PRODUCT_TAG (
+    ProductID VARCHAR(10),
+    Tag VARCHAR(50),
+
+    PRIMARY KEY (ProductID, Tag),
+
+    FOREIGN KEY (ProductID)
+        REFERENCES PRODUCT(ProductID)
+);
+
+-- 4.2 PRODUCT_COLOUR
+
+CREATE TABLE PRODUCT_COLOUR (
+    ProductID VARCHAR(10),
+    Colour VARCHAR(30),
+
+    PRIMARY KEY (ProductID, Colour),
+
+    FOREIGN KEY (ProductID)
+        REFERENCES PRODUCT(ProductID)
+);
+
+
+-- =====================================================
+-- 5. FIFTH NORMAL FORM (5NF)
+-- =====================================================
+
+-- 5.1 SUPPLIER_CATEGORY
+
+CREATE TABLE SUPPLIER_CATEGORY (
+    SupplierID VARCHAR(10),
+    CategoryID VARCHAR(10),
+
+    PRIMARY KEY (SupplierID, CategoryID),
+
+    FOREIGN KEY (SupplierID)
+        REFERENCES SUPPLIER(SupplierID),
+
+    FOREIGN KEY (CategoryID)
+        REFERENCES CATEGORY(CategoryID)
+);
+
+-- 5.2 CATEGORY_WAREHOUSE
+
+CREATE TABLE CATEGORY_WAREHOUSE (
+    CategoryID VARCHAR(10),
+    WarehouseID VARCHAR(10),
+
+    PRIMARY KEY (CategoryID, WarehouseID),
+
+    FOREIGN KEY (CategoryID)
+        REFERENCES CATEGORY(CategoryID),
+
+    FOREIGN KEY (WarehouseID)
+        REFERENCES WAREHOUSE(WarehouseID)
+);
+
+-- 5.3 SUPPLIER_WAREHOUSE
+
+CREATE TABLE SUPPLIER_WAREHOUSE (
+    SupplierID VARCHAR(10),
+    WarehouseID VARCHAR(10),
+
+    PRIMARY KEY (SupplierID, WarehouseID),
+
+    FOREIGN KEY (SupplierID)
+        REFERENCES SUPPLIER(SupplierID),
+
+    FOREIGN KEY (WarehouseID)
+        REFERENCES WAREHOUSE(WarehouseID)
+);
+
+
+-- =====================================================
+-- 6. INSERT SAMPLE DATA
+-- =====================================================
+
+-- CUSTOMER
+
+INSERT INTO CUSTOMER VALUES
+('C01','Arun Kumar','arun@example.com'),
+('C02','Priya Sharma','priya@example.com');
+
+-- SUPPLIER
+
+INSERT INTO SUPPLIER VALUES
+('S01','Tech Suppliers','9876543210'),
+('S02','Smart Traders','9876501234');
+
+-- CATEGORY
+
+INSERT INTO CATEGORY VALUES
+('CAT01','Electronics'),
+('CAT02','Accessories');
+
+-- WAREHOUSE
+
+INSERT INTO WAREHOUSE VALUES
+('W01','Chennai'),
+('W02','Bengaluru');
+
+-- POSTAL
+
+INSERT INTO POSTAL VALUES
+('600001','Chennai','Tamil Nadu'),
+('560001','Bengaluru','Karnataka');
+
+-- PRODUCT
+
+INSERT INTO PRODUCT VALUES
+('P01','Wireless Mouse',500.00,'CAT01','S01'),
+('P02','Keyboard',900.00,'CAT02','S02');
+
+-- ORDERS
+
+INSERT INTO ORDERS VALUES
+('O101','2026-11-01','C01','Anna Salai','600001'),
+('O102','2026-11-02','C02','MG Road','560001');
+
+-- ORDER_ITEM
+
+INSERT INTO ORDER_ITEM VALUES
+('O101','P01',2,'W01'),
+('O101','P02',1,'W02'),
+('O102','P01',1,'W01');
+
+-- STREET_POSTAL
+
+INSERT INTO STREET_POSTAL VALUES
+('Anna Salai','Chennai','600001'),
+('MG Road','Bengaluru','560001');
+
+-- PRODUCT_TAG
+
+INSERT INTO PRODUCT_TAG VALUES
+('P01','Wireless'),
+('P01','Portable'),
+('P02','Office');
+
+-- PRODUCT_COLOUR
+
+INSERT INTO PRODUCT_COLOUR VALUES
+('P01','Black'),
+('P01','White'),
+('P02','Grey');
+
+-- SUPPLIER_CATEGORY
+
+INSERT INTO SUPPLIER_CATEGORY VALUES
+('S01','CAT01'),
+('S02','CAT02');
+
+-- CATEGORY_WAREHOUSE
+
+INSERT INTO CATEGORY_WAREHOUSE VALUES
+('CAT01','W01'),
+('CAT01','W02'),
+('CAT02','W01'),
+('CAT02','W02');
+
+-- SUPPLIER_WAREHOUSE
+
+INSERT INTO SUPPLIER_WAREHOUSE VALUES
+('S01','W01'),
+('S01','W02'),
+('S02','W01'),
+('S02','W02');
+
+
+-- =====================================================
+-- 7. DISPLAY TABLE RECORDS
+-- =====================================================
+
+SELECT * FROM ORDER_LINE_FLAT;
+SELECT * FROM CUSTOMER;
+SELECT * FROM SUPPLIER;
+SELECT * FROM CATEGORY;
+SELECT * FROM WAREHOUSE;
+SELECT * FROM POSTAL;
+SELECT * FROM PRODUCT;
+SELECT * FROM ORDERS;
+SELECT * FROM ORDER_ITEM;
+SELECT * FROM STREET_POSTAL;
+SELECT * FROM PRODUCT_TAG;
+SELECT * FROM PRODUCT_COLOUR;
+SELECT * FROM SUPPLIER_CATEGORY;
+SELECT * FROM CATEGORY_WAREHOUSE;
+SELECT * FROM SUPPLIER_WAREHOUSE;
+
+
+-- =====================================================
+-- 8. ORDER HISTORY USING FIVE TABLES (JOIN)
+-- =====================================================
+
+SELECT
+    O.OrderID,
+    O.OrderDate,
+    C.CustomerName,
+    P.ProductName,
+    I.Quantity,
+    W.WarehouseCity
+FROM ORDERS O
+JOIN CUSTOMER C
+    ON O.CustomerID = C.CustomerID
+JOIN ORDER_ITEM I
+    ON O.OrderID = I.OrderID
+JOIN PRODUCT P
+    ON I.ProductID = P.ProductID
+JOIN WAREHOUSE W
+    ON I.WarehouseID = W.WarehouseID;
+
+
+-- =====================================================
+-- 9. FUNCTIONAL DEPENDENCY AND CONSTRAINT TESTS
+-- =====================================================
+
+-- Test invalid quantity
+-- Expected: Rejected by CHECK and/or PRIMARY KEY.
+
+-- INSERT INTO ORDER_ITEM
+-- VALUES ('O101','P01',-2,'W01');
+
+
+-- Test invalid foreign key
+-- Expected: Rejected because P99 does not exist.
+
+-- INSERT INTO ORDER_ITEM
+-- VALUES ('O101','P99',1,'W01');
+
+
+-- Test duplicate customer email
+-- Expected: Rejected because email is UNIQUE.
+
+-- INSERT INTO CUSTOMER
+-- VALUES ('C03','Test Customer','arun@example.com');
+
+
+-- Update supplier phone
+
+UPDATE SUPPLIER
+SET SupplierPhone = '9999999999'
+WHERE SupplierID = 'S01';
+
+SELECT * FROM SUPPLIER;
+
+
+-- =====================================================
+-- 10. INSERTION ANOMALY TEST
+-- =====================================================
+
+INSERT INTO PRODUCT VALUES
+('P03','Bluetooth Speaker',1500.00,'CAT01','S01');
+
+SELECT * FROM PRODUCT;
+
+
+-- =====================================================
+-- 11. INDEX CREATION
+-- =====================================================
+
+CREATE INDEX idx_orders_customer
+ON ORDERS(CustomerID);
+
+CREATE INDEX idx_order_item_product
+ON ORDER_ITEM(ProductID);
+
+CREATE INDEX idx_order_item_warehouse
+ON ORDER_ITEM(WarehouseID);
+
+CREATE INDEX idx_orders_date
+ON ORDERS(OrderDate);
+
+
+-- =====================================================
+-- 12. STORAGE MEASUREMENT
+-- =====================================================
+
+SELECT
+    TABLE_NAME,
+    TABLE_ROWS,
+    DATA_LENGTH,
+    INDEX_LENGTH,
+    DATA_LENGTH + INDEX_LENGTH AS TOTAL_BYTES
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = 'ShopNestDB';
+
+
+-- =====================================================
+-- 13. EXACT ROW COUNT
+-- =====================================================
+
+SELECT COUNT(*) AS TotalCustomers FROM CUSTOMER;
+SELECT COUNT(*) AS TotalProducts FROM PRODUCT;
+SELECT COUNT(*) AS TotalOrders FROM ORDERS;
+SELECT COUNT(*) AS TotalOrderItems FROM ORDER_ITEM;
+
+
+-- =====================================================
+-- 14. REDUNDANCY MEASUREMENT
+-- =====================================================
+
+SELECT
+    SupplierID,
+    COUNT(*) AS NumberOfCopies,
+    COUNT(*) - 1 AS RedundantCopies
+FROM ORDER_LINE_FLAT
+GROUP BY SupplierID;
+
+SELECT
+    CustomerID,
+    COUNT(*) AS NumberOfCopies
+FROM ORDER_LINE_FLAT
+GROUP BY CustomerID;
+
+
+-- =====================================================
+-- 15. QUERY PERFORMANCE
+-- =====================================================
+
+EXPLAIN ANALYZE
+SELECT
+    O.OrderID,
+    O.OrderDate,
+    C.CustomerName,
+    P.ProductName,
+    I.Quantity,
+    W.WarehouseCity
+FROM ORDERS O
+JOIN CUSTOMER C
+    ON O.CustomerID = C.CustomerID
+JOIN ORDER_ITEM I
+    ON O.OrderID = I.OrderID
+JOIN PRODUCT P
+    ON I.ProductID = P.ProductID
+JOIN WAREHOUSE W
+    ON I.WarehouseID = W.WarehouseID
+WHERE C.CustomerID = 'C01';
+
+
+-- =====================================================
+-- 16. TASK 12 - HISTORICAL PRICE MODIFICATION
+-- =====================================================
+
+-- Add PricePaid column
+
+ALTER TABLE ORDER_ITEM
+ADD COLUMN PricePaid DECIMAL(10,2)
+NOT NULL DEFAULT 0.00
+CHECK (PricePaid >= 0);
+
+-- Update historical prices
+
+UPDATE ORDER_ITEM
+SET PricePaid = 500.00
+WHERE OrderID = 'O101'
+AND ProductID = 'P01';
+
+UPDATE ORDER_ITEM
+SET PricePaid = 900.00
+WHERE OrderID = 'O101'
+AND ProductID = 'P02';
+
+UPDATE ORDER_ITEM
+SET PricePaid = 550.00
+WHERE OrderID = 'O102'
+AND ProductID = 'P01';
+
+
+-- Create new order
+
+INSERT INTO ORDERS VALUES
+('O104','2026-11-04','C01','Anna Salai','600001');
+
+-- Insert transaction-specific price
+
+INSERT INTO ORDER_ITEM
+(OrderID, ProductID, Quantity, WarehouseID, PricePaid)
+VALUES
+('O104','P01',2,'W01',500.00);
+
+
+-- Change current product price
+
+UPDATE PRODUCT
+SET UnitPrice = 600.00
+WHERE ProductID = 'P01';
+
+
+-- Display current price and historical price
+
+SELECT
+    I.OrderID,
+    I.ProductID,
+    P.ProductName,
+    P.UnitPrice AS CurrentPrice,
+    I.PricePaid AS HistoricalPrice,
+    I.Quantity
+FROM ORDER_ITEM I
+JOIN PRODUCT P
+    ON I.ProductID = P.ProductID
+WHERE I.OrderID = 'O104';
+
+
+-- =====================================================
+-- 17. COVERING INDEX FOR ORDER HISTORY
+-- =====================================================
+
+CREATE INDEX idx_order_item_history
+ON ORDER_ITEM
+(OrderID, ProductID, Quantity, WarehouseID, PricePaid);
+
+
+-- =====================================================
+-- 18. DELETE ANOMALY TEST
+-- Execute this section last because it deletes O102.
+-- =====================================================
+
+DELETE FROM ORDER_ITEM
+WHERE OrderID = 'O102';
+
+DELETE FROM ORDERS
+WHERE OrderID = 'O102';
+
+-- Customer should still exist
+
+SELECT * FROM CUSTOMER
+WHERE CustomerID = 'C02';
+
+
+-- =====================================================
+-- 19. FINAL VERIFICATION
+-- =====================================================
+
+SHOW TABLES;
+
+DESC CUSTOMER;
+DESC SUPPLIER;
+DESC CATEGORY;
+DESC WAREHOUSE;
+DESC POSTAL;
+DESC PRODUCT;
+DESC ORDERS;
+DESC ORDER_ITEM;
+DESC STREET_POSTAL;
+DESC PRODUCT_TAG;
+DESC PRODUCT_COLOUR;
+DESC SUPPLIER_CATEGORY;
+DESC CATEGORY_WAREHOUSE;
+DESC SUPPLIER_WAREHOUSE;
+
+SELECT * FROM CUSTOMER;
+SELECT * FROM SUPPLIER;
+SELECT * FROM CATEGORY;
+SELECT * FROM WAREHOUSE;
+SELECT * FROM POSTAL;
+SELECT * FROM PRODUCT;
+SELECT * FROM ORDERS;
+SELECT * FROM ORDER_ITEM;
+SELECT * FROM PRODUCT_TAG;
+SELECT * FROM PRODUCT_COLOUR;
+
+-- =====================================================
+-- END OF SHOPNEST DATABASE IMPLEMENTATION
+-- =====================================================
