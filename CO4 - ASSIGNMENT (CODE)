@@ -1,0 +1,145 @@
+
+import random
+import time
+from math import ceil
+RECORDS_PER_BLOCK = 20
+class HeapFile:
+    def __init__(self):
+        self.blocks = []
+        self.reads = 0
+        self.writes = 0
+    def insert(self, record):
+        if not self.blocks or len(self.blocks[-1]) >= RECORDS_PER_BLOCK:
+            self.blocks.append([])
+        self.blocks[-1].append(record)
+        self.writes += 1
+    def search(self, key):
+        for block in self.blocks:
+            self.reads += 1
+            for record in block:
+                if record["id"] == key:
+                    return record
+        return None
+    def delete(self, key):
+        for block in self.blocks:
+            self.reads += 1
+            for record in block:
+                if record["id"] == key:
+                    block.remove(record)
+                    self.writes += 1
+                    return True
+        return False
+    def range_search(self, low, high):
+        result = []
+        for block in self.blocks:
+            self.reads += 1
+            result.extend(
+                r for r in block if low <= r["id"] <= high
+            )
+        return result
+class HashFile:
+    def __init__(self, size=1000):
+        self.buckets = [[] for _ in range(size)]
+        self.reads = 0
+        self.writes = 0
+    def insert(self, record):
+        bucket = record["id"] % len(self.buckets)
+        self.buckets[bucket].append(record)
+        self.writes += 1
+    def search(self, key):
+        bucket = key % len(self.buckets)
+        self.reads += 1
+        for record in self.buckets[bucket]:
+            if record["id"] == key:
+                return record
+        return None
+    def delete(self, key):
+        bucket = key % len(self.buckets)
+        self.reads += 1
+        for record in self.buckets[bucket]:
+            if record["id"] == key:
+                self.buckets[bucket].remove(record)
+                self.writes += 1
+                return True
+        return False
+    def range_search(self, low, high):
+        result = []
+        for bucket in self.buckets:
+            self.reads += 1
+            result.extend(
+                r for r in bucket if low <= r["id"] <= high
+            )
+        return result
+class SortedFile:
+    def __init__(self):
+        self.records = []
+        self.reads = 0
+        self.writes = 0
+    def insert(self, record):
+        self.records.append(record)
+        self.records.sort(key=lambda r: r["id"])
+        self.writes += ceil(len(self.records) /
+                            RECORDS_PER_BLOCK)
+    def search(self, key):
+        low, high = 0, len(self.records) - 1
+        while low <= high:
+            mid = (low + high) // 2
+            self.reads += 1
+            if self.records[mid]["id"] == key:
+                return self.records[mid]
+            if self.records[mid]["id"] < key:
+                low = mid + 1
+            else:
+                high = mid - 1
+        return None
+    def delete(self, key):
+        for i, record in enumerate(self.records):
+            if record["id"] == key:
+                self.records.pop(i)
+                self.writes += 1
+                return True
+        return False
+    def range_search(self, low, high):
+        result = [
+            r for r in self.records
+            if low <= r["id"] <= high
+        ]
+        self.reads += ceil(len(self.records) /
+                           RECORDS_PER_BLOCK)
+        return result
+def create_record(i):
+    return {
+        "id": i,
+        "account": random.randint(1000, 9999),
+        "branch": "CHENNAI"
+    }
+def test_database(n):
+    heap = HeapFile()
+    hashed = HashFile()
+    sorted_file = SortedFile()
+    data = [create_record(i) for i in range(n)]
+    for record in data:
+        heap.insert(record)
+        hashed.insert(record)
+        sorted_file.insert(record)
+    key = n // 2
+    print("\nDataset size:", n)
+    for name, db in [
+        ("Heap", heap),
+        ("Hash", hashed),
+        ("Sorted", sorted_file)
+    ]:
+        start = time.perf_counter()
+        result = db.search(key)
+        elapsed = time.perf_counter() - start
+        print(name,
+              "Found:", result is not None,
+              "Reads:", db.reads,
+              "Writes:", db.writes,
+              "Time:", round(elapsed, 6), "seconds")
+        db.reads = 0
+        db.writes = 0
+        result = db.range_search(100, 199)
+        print("Range results:", len(result))
+for size in [1000, 10000, 100000]:
+    test_database(size)
