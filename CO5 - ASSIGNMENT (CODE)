@@ -1,0 +1,550 @@
+
+-- =====================================================
+-- CO5: RIVERGATE COOPERATIVE
+-- CONCURRENCY CONTROL AND RECOVERY
+-- MySQL 8.0+
+-- =====================================================
+
+-- 1. CREATE DATABASE
+CREATE DATABASE RiverGateDB;
+USE RiverGateDB;
+
+-- =====================================================
+-- 2. CREATE CANAL POOL TABLE
+-- =====================================================
+
+CREATE TABLE Canal_Pool (
+    Pool_ID VARCHAR(10) PRIMARY KEY,
+    Token_Balance INT NOT NULL,
+    CHECK (Token_Balance >= 0)
+);
+
+-- Insert 32 canal pools, each with 500 tokens
+
+INSERT INTO Canal_Pool (Pool_ID, Token_Balance)
+WITH RECURSIVE PoolNumbers AS (
+    SELECT 0 AS n
+    UNION ALL
+    SELECT n + 1
+    FROM PoolNumbers
+    WHERE n < 31
+)
+SELECT CONCAT('p', LPAD(n, 2, '0')), 500
+FROM PoolNumbers;
+
+-- View all pools
+SELECT * FROM Canal_Pool ORDER BY Pool_ID;
+
+-- Check total tokens
+SELECT SUM(Token_Balance) AS Total_Tokens
+FROM Canal_Pool;
+
+
+-- =====================================================
+-- 3. CREATE FARM TABLE
+-- =====================================================
+
+CREATE TABLE Farm (
+    Farm_ID VARCHAR(10) PRIMARY KEY,
+    Farm_Name VARCHAR(100) NOT NULL,
+    Daily_Ceiling INT NOT NULL,
+    CHECK (Daily_Ceiling > 0)
+);
+
+INSERT INTO Farm VALUES
+('F001', 'Green Valley Farm', 100),
+('F002', 'Sunrise Farm', 150),
+('F003', 'River Side Farm', 200);
+
+SELECT * FROM Farm;
+
+
+-- =====================================================
+-- 4. CREATE FARM DAILY USAGE TABLE
+-- =====================================================
+
+CREATE TABLE Farm_Daily_Usage (
+    Farm_ID VARCHAR(10),
+    Usage_Date DATE,
+    Tokens_Used INT DEFAULT 0,
+
+    PRIMARY KEY (Farm_ID, Usage_Date),
+
+    FOREIGN KEY (Farm_ID)
+        REFERENCES Farm(Farm_ID),
+
+    CHECK (Tokens_Used >= 0)
+);
+
+-- Initialize today's usage
+INSERT INTO Farm_Daily_Usage
+    (Farm_ID, Usage_Date, Tokens_Used)
+SELECT Farm_ID, CURRENT_DATE, 0
+FROM Farm;
+
+
+-- =====================================================
+-- 5. CREATE ALLOCATION REQUEST TABLE
+-- =====================================================
+
+CREATE TABLE Allocation_Request (
+    Request_ID VARCHAR(20) PRIMARY KEY,
+    Farm_ID VARCHAR(10) NOT NULL,
+    Source_Pool VARCHAR(10) NOT NULL,
+    Destination_Pool VARCHAR(10) NOT NULL,
+    Token_Amount INT NOT NULL,
+    Request_Status ENUM(
+        'PENDING',
+        'APPLIED',
+        'REJECTED'
+    ) DEFAULT 'PENDING',
+    Request_Date DATE NOT NULL,
+
+    FOREIGN KEY (Farm_ID)
+        REFERENCES Farm(Farm_ID),
+
+    FOREIGN KEY (Source_Pool)
+        REFERENCES Canal_Pool(Pool_ID),
+
+    FOREIGN KEY (Destination_Pool)
+        REFERENCES Canal_Pool(Pool_ID),
+
+    CHECK (Token_Amount > 0),
+    CHECK (Source_Pool <> Destination_Pool)
+);
+
+
+-- =====================================================
+-- 6. CREATE TRANSACTION AUDIT TABLE
+-- =====================================================
+
+CREATE TABLE Allocation_Audit (
+    Audit_ID INT AUTO_INCREMENT PRIMARY KEY,
+    Request_ID VARCHAR(20),
+    Farm_ID VARCHAR(10),
+    Source_Pool VARCHAR(10),
+    Destination_Pool VARCHAR(10),
+    Token_Amount INT,
+    Operation_Status VARCHAR(30),
+    Operation_Time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- =====================================================
+-- 7. CREATE INDEXES
+-- =====================================================
+
+CREATE INDEX idx_request_farm_date
+ON Allocation_Request(Farm_ID, Request_Date);
+
+CREATE INDEX idx_request_status
+ON Allocation_Request(Request_Status);
+
+CREATE INDEX idx_audit_request
+ON Allocation_Audit(Request_ID);
+
+CREATE INDEX idx_pool_balance
+ON Canal_Pool(Token_Balance);
+
+
+-- =====================================================
+-- 8. STORED PROCEDURE FOR SAFE TOKEN MOVEMENT
+-- =====================================================
+
+DELIMITER //
+
+CREATE PROCEDURE Move_Water_Tokens(
+    IN p_Request_ID VARCHAR(20),
+    IN p_Farm_ID VARCHAR(10),
+    IN p_Source VARCHAR(10),
+    IN p_Destination VARCHAR(10),
+    IN p_Amount INT
+)
+BEGIN
+    DECLARE v_Status VARCHAR(20);
+    DECLARE v_Source_Balance INT;
+    DECLARE v_Destination_Balance INT;
+    DECLARE v_Daily_Used INT;
+    DECLARE v_Daily_Ceiling INT;
+    DECLARE v_First_Pool VARCHAR(10);
+    DECLARE v_Second_Pool VARCHAR(10);
+    DECLARE v_Found INT DEFAULT 1;
+
+    -- Any SQL error causes rollback
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- Validate input
+    IF p_Amount <= 0 OR p_Source = p_Destination THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invalid token movement';
+    END IF;
+
+    -- Create request record if it does not already exist
+    INSERT IGNORE INTO Allocation_Request (
+        Request_ID,
+        Farm_ID,
+        Source_Pool,
+        Destination_Pool,
+        Token_Amount,
+        Request_Status,
+        Request_Date
+    )
+    VALUES (
+        p_Request_ID,
+        p_Farm_ID,
+        p_Source,
+        p_Destination,
+        p_Amount,
+        'PENDING',
+        CURRENT_DATE
+    );
+
+    -- Lock request row to prevent duplicate processing
+    SELECT Request_Status
+    INTO v_Status
+    FROM Allocation_Request
+    WHERE Request_ID = p_Request_ID
+    FOR UPDATE;
+
+    -- Repeated request: do not debit again
+    IF v_Status = 'APPLIED' THEN
+        COMMIT;
+
+        SELECT 'REPLAY - REQUEST ALREADY APPLIED' AS Result;
+    ELSE
+
+        -- Lock farm information
+        SELECT Daily_Ceiling
+        INTO v_Daily_Ceiling
+        FROM Farm
+        WHERE Farm_ID = p_Farm_ID;
+
+        -- Create today's usage row if missing
+        INSERT IGNORE INTO Farm_Daily_Usage (
+            Farm_ID, Usage_Date, Tokens_Used
+        )
+        VALUES (
+            p_Farm_ID, CURRENT_DATE, 0
+        );
+
+        -- Lock farm-day usage row
+        SELECT Tokens_Used
+        INTO v_Daily_Used
+        FROM Farm_Daily_Usage
+        WHERE Farm_ID = p_Farm_ID
+          AND Usage_Date = CURRENT_DATE
+        FOR UPDATE;
+
+        -- Acquire canal locks in a consistent order
+        IF p_Source < p_Destination THEN
+            SET v_First_Pool = p_Source;
+            SET v_Second_Pool = p_Destination;
+        ELSE
+            SET v_First_Pool = p_Destination;
+            SET v_Second_Pool = p_Source;
+        END IF;
+
+        SELECT Token_Balance
+        INTO v_Source_Balance
+        FROM Canal_Pool
+        WHERE Pool_ID = v_First_Pool
+        FOR UPDATE;
+
+        SELECT Token_Balance
+        INTO v_Destination_Balance
+        FROM Canal_Pool
+        WHERE Pool_ID = v_Second_Pool
+        FOR UPDATE;
+
+        -- Read actual source and destination balances
+        SELECT Token_Balance
+        INTO v_Source_Balance
+        FROM Canal_Pool
+        WHERE Pool_ID = p_Source;
+
+        SELECT Token_Balance
+        INTO v_Destination_Balance
+        FROM Canal_Pool
+        WHERE Pool_ID = p_Destination;
+
+        -- Validate source balance
+        IF v_Source_Balance < p_Amount THEN
+
+            UPDATE Allocation_Request
+            SET Request_Status = 'REJECTED'
+            WHERE Request_ID = p_Request_ID;
+
+            INSERT INTO Allocation_Audit (
+                Request_ID, Farm_ID, Source_Pool,
+                Destination_Pool, Token_Amount,
+                Operation_Status
+            )
+            VALUES (
+                p_Request_ID, p_Farm_ID, p_Source,
+                p_Destination, p_Amount, 'INSUFFICIENT BALANCE'
+            );
+
+            COMMIT;
+
+            SELECT 'REJECTED - INSUFFICIENT SOURCE TOKENS'
+            AS Result;
+
+        -- Validate farm daily ceiling
+        ELSEIF v_Daily_Used + p_Amount > v_Daily_Ceiling THEN
+
+            UPDATE Allocation_Request
+            SET Request_Status = 'REJECTED'
+            WHERE Request_ID = p_Request_ID;
+
+            INSERT INTO Allocation_Audit (
+                Request_ID, Farm_ID, Source_Pool,
+                Destination_Pool, Token_Amount,
+                Operation_Status
+            )
+            VALUES (
+                p_Request_ID, p_Farm_ID, p_Source,
+                p_Destination, p_Amount, 'DAILY LIMIT EXCEEDED'
+            );
+
+            COMMIT;
+
+            SELECT 'REJECTED - FARM DAILY CEILING EXCEEDED'
+            AS Result;
+
+        ELSE
+
+            -- Debit source pool
+            UPDATE Canal_Pool
+            SET Token_Balance = Token_Balance - p_Amount
+            WHERE Pool_ID = p_Source;
+
+            -- Credit destination pool
+            UPDATE Canal_Pool
+            SET Token_Balance = Token_Balance + p_Amount
+            WHERE Pool_ID = p_Destination;
+
+            -- Update farm daily usage
+            UPDATE Farm_Daily_Usage
+            SET Tokens_Used = Tokens_Used + p_Amount
+            WHERE Farm_ID = p_Farm_ID
+              AND Usage_Date = CURRENT_DATE;
+
+            -- Mark request as applied
+            UPDATE Allocation_Request
+            SET Request_Status = 'APPLIED'
+            WHERE Request_ID = p_Request_ID;
+
+            -- Record transaction history
+            INSERT INTO Allocation_Audit (
+                Request_ID, Farm_ID, Source_Pool,
+                Destination_Pool, Token_Amount,
+                Operation_Status
+            )
+            VALUES (
+                p_Request_ID, p_Farm_ID, p_Source,
+                p_Destination, p_Amount, 'SUCCESS'
+            );
+
+            COMMIT;
+
+            SELECT 'SUCCESS - TOKENS MOVED'
+            AS Result;
+
+        END IF;
+    END IF;
+END //
+
+DELIMITER ;
+
+
+-- =====================================================
+-- 9. TEST A SUCCESSFUL TOKEN MOVEMENT
+-- =====================================================
+
+CALL Move_Water_Tokens(
+    'R17',
+    'F001',
+    'p00',
+    'p31',
+    10
+);
+
+-- Check source pool
+SELECT * FROM Canal_Pool
+WHERE Pool_ID = 'p00';
+
+-- Check destination pool
+SELECT * FROM Canal_Pool
+WHERE Pool_ID = 'p31';
+
+
+-- =====================================================
+-- 10. TEST DUPLICATE REQUEST
+-- =====================================================
+
+-- Same request ID is used again.
+-- Tokens must NOT be moved a second time.
+
+CALL Move_Water_Tokens(
+    'R17',
+    'F001',
+    'p00',
+    'p31',
+    10
+);
+
+
+-- =====================================================
+-- 11. TEST FARM DAILY CEILING
+-- =====================================================
+
+-- F001 has a daily ceiling of 100.
+-- R17 has already used 10 tokens.
+-- This request should be rejected because 10 + 95 > 100.
+
+CALL Move_Water_Tokens(
+    'R18',
+    'F001',
+    'p00',
+    'p31',
+    95
+);
+
+
+-- =====================================================
+-- 12. TEST INSUFFICIENT SOURCE BALANCE
+-- =====================================================
+
+CALL Move_Water_Tokens(
+    'R19',
+    'F002',
+    'p01',
+    'p31',
+    1000
+);
+
+
+-- =====================================================
+-- 13. VIEW ALL ALLOCATION REQUESTS
+-- =====================================================
+
+SELECT *
+FROM Allocation_Request
+ORDER BY Request_Date, Request_ID;
+
+
+-- =====================================================
+-- 14. VIEW FARM DAILY USAGE
+-- =====================================================
+
+SELECT
+    F.Farm_ID,
+    F.Farm_Name,
+    F.Daily_Ceiling,
+    U.Usage_Date,
+    U.Tokens_Used,
+    F.Daily_Ceiling - U.Tokens_Used
+        AS Remaining_Daily_Quota
+FROM Farm F
+JOIN Farm_Daily_Usage U
+    ON F.Farm_ID = U.Farm_ID;
+
+
+-- =====================================================
+-- 15. REGIONAL REPORT
+-- CONSISTENT SNAPSHOT
+-- =====================================================
+
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+START TRANSACTION WITH CONSISTENT SNAPSHOT;
+
+SELECT
+    Pool_ID,
+    Token_Balance
+FROM Canal_Pool
+ORDER BY Pool_ID;
+
+SELECT
+    SUM(Token_Balance) AS Total_Tokens
+FROM Canal_Pool;
+
+COMMIT;
+
+
+-- =====================================================
+-- 16. VIEW TRANSACTION AUDIT
+-- =====================================================
+
+SELECT *
+FROM Allocation_Audit
+ORDER BY Operation_Time DESC;
+
+
+-- =====================================================
+-- 17. CHECK TOKEN CONSERVATION
+-- =====================================================
+
+SELECT
+    SUM(Token_Balance) AS Current_Total_Tokens
+FROM Canal_Pool;
+
+-- Expected total: 16000
+
+
+-- =====================================================
+-- 18. CHECK FOR NEGATIVE BALANCES
+-- =====================================================
+
+SELECT *
+FROM Canal_Pool
+WHERE Token_Balance < 0;
+
+
+-- =====================================================
+-- 19. CHECK DAILY CEILING VIOLATIONS
+-- =====================================================
+
+SELECT
+    F.Farm_ID,
+    F.Farm_Name,
+    U.Tokens_Used,
+    F.Daily_Ceiling
+FROM Farm F
+JOIN Farm_Daily_Usage U
+    ON F.Farm_ID = U.Farm_ID
+WHERE U.Tokens_Used > F.Daily_Ceiling;
+
+
+-- =====================================================
+-- 20. PERFORMANCE ANALYSIS
+-- =====================================================
+
+EXPLAIN ANALYZE
+SELECT
+    Request_ID,
+    Farm_ID,
+    Token_Amount,
+    Request_Status
+FROM Allocation_Request
+WHERE Farm_ID = 'F001'
+  AND Request_Date = CURRENT_DATE;
+
+
+-- =====================================================
+-- 21. TABLE INFORMATION
+-- =====================================================
+
+SHOW TABLES;
+
+DESC Canal_Pool;
+DESC Farm;
+DESC Farm_Daily_Usage;
+DESC Allocation_Request;
+DESC Allocation_Audit;
